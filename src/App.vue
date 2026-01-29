@@ -6,6 +6,7 @@ const spins = ref(100);
 const cost = ref(1000);
 const result = ref(null);
 const message = ref("");
+const isLimited = ref(false);
 
 const calc = () => {
   const isPaid = localStorage.getItem("isPaid") === "true";
@@ -13,6 +14,7 @@ const calc = () => {
 
   if (!isPaid && getCount() >= LIMIT) {
     message.value = "無料回数を超えました";
+    isLimited.value = true;
     return;
   }
 
@@ -50,6 +52,10 @@ const getCount = () => {
 const incrementCount = () => {
   localStorage.setItem(todayKey(), getCount() + 1);
 };
+
+const goToPayment = () => {
+  window.location.href = "ここにStripeのPayment Link";
+};
 </script>
 
 <template>
@@ -58,16 +64,23 @@ const incrementCount = () => {
       <h1>期待値シミュレーター</h1>
 
       <p>
-        本サービスは、確率・期待値を簡単に計算できる 個人向けWebツールです。
+        本サービスは、確率や数値の関係を理解するための学習・計算用Webツールです。<br />
+        統計・確率の考え方を可視化することを目的としており、<br />
+        ギャンブルや投機行為を推奨・支援するものではありません。<br />
+        本ツールは教育・学習用途として提供されています。<br />
       </p>
 
       <p>無料利用回数を超えた場合、100円の買い切り決済で 継続利用できます。</p>
 
-      <p class="contact">お問い合わせ：your-email@gmail.com</p>
+      <!-- <p class="contact">お問い合わせ：your-email@gmail.com</p> -->
+
+      <p>
+        ※期待値は理論上の数値であり、実際の結果を保証するものではありません。
+      </p>
     </div>
 
     <div>
-      <label>初当たり確率（例：99）</label>
+      <label>確率（例：99）</label>
       <input type="number" v-model="prob" />
     </div>
 
@@ -91,16 +104,18 @@ const incrementCount = () => {
         </span>
       </h2>
     </div>
-
-    <p v-if="message" style="color: red">
-      {{ message }}
-    </p>
+    <div v-if="isLimited">
+      <p v-if="message" style="color: red">
+        {{ message }}
+      </p>
+      <button @click="goToPayment">100円で続ける</button>
+    </div>
   </div>
 </template>
 
 <style>
 .container {
-  max-width: 400px;
+  max-width: 600px;
   margin: 40px auto;
   font-family: sans-serif;
 }
