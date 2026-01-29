@@ -108,7 +108,7 @@ const goToPayment = () => {
       <p v-if="message" style="color: red">
         {{ message }}
       </p>
-      <button @click="goToPayment">100円で続ける</button>
+      <button @click="goToPayment">有料版を利用する（100円）</button>
     </div>
   </div>
 </template>
