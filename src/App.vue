@@ -1,132 +1,313 @@
 <script setup>
-import { ref } from "vue";
+import { ref, computed, onMounted, watch, reactive } from "vue";
+import { Pie } from "vue-chartjs";
+import { Chart as ChartJS, ArcElement, Tooltip, Legend } from "chart.js";
 
-const prob = ref(99);
-const spins = ref(100);
-const cost = ref(1000);
+ChartJS.register(ArcElement, Tooltip, Legend);
+
+// 出玉振り分け（初期値）
+const payouts = reactive([
+  { balls: 1500, rate: 50 },
+  { balls: 3000, rate: 30 },
+]);
+
+// 追加
+const addPayout = () => {
+  payouts.push({ balls: 1000, rate: 0 });
+};
+
+// 削除
+const removePayout = (index) => {
+  payouts.splice(index, 1);
+};
+
+// 円グラフ用
+const chartData = computed(() => ({
+  labels: payouts.map((p) => `${p.balls}発`),
+  datasets: [
+    {
+      data: payouts.map((p) => p.rate),
+    },
+  ],
+}));
+
+const chartOptions = {
+  responsive: true,
+  maintainAspectRatio: false,
+};
+
+// 合計％
+const totalRate = computed(() => payouts.reduce((sum, p) => sum + p.rate, 0));
+/* =====================
+   入力値
+===================== */
+
+// 通常時
+const probability = ref(319); // 1/319
+const rotationsPer1k = ref(18); // 1Kあたり回転数
+
+// 初当たり
+const initialPayout = ref(300); // 初当たり出玉
+const rushEntryRate = ref(72); // RUSH突入率（%）
+
+// RUSH
+const rushContinueRate = ref(85); // 継続率（%）
+
+// 出玉振り分け
+const distributions = ref([
+  { rate: 50, payout: 1000 },
+  { rate: 50, payout: 3000 },
+]);
+/* =====================
+   出力値
+===================== */
 const result = ref(null);
-const message = ref("");
-const isLimited = ref(false);
 
-const calc = () => {
-  const isPaid = localStorage.getItem("isPaid") === "true";
-  message.value = "";
+/* =====================
+   振り分け操作
+===================== */
 
-  if (!isPaid && getCount() >= LIMIT) {
-    message.value = "無料回数を超えました";
-    isLimited.value = true;
-    return;
+function addRow() {
+  distributions.value.push({ rate: 0, payout: 0 });
+}
+
+function removeRow(index) {
+  if (distributions.value.length > 1) {
+    distributions.value.splice(index, 1);
   }
+}
 
-  const p = Number(prob.value);
-  const s = Number(spins.value);
-  const c = Number(cost.value);
+/* =====================
+   計算系
+===================== */
+const spinsList = computed(() => [100, 200, probability.value]);
 
-  if (p <= 0 || s <= 0 || c < 0) {
-    message.value = "入力エラー";
-    return;
-  }
+const resultsBySpins = computed(() => {
+  if (!result.value) return [];
 
-  const expectedHits = s / p;
-  const avgPayout = 1000;
-  const expectedReturn = expectedHits * avgPayout;
+  const costPerSpin = 1000 / rotationsPer1k.value;
 
-  result.value = Math.round(expectedReturn - c);
+  return spinsList.value.map((spins) => {
+    const investment = spins * costPerSpin;
+    const profit = result.value.expectedPayout - investment;
 
-  if (!isPaid) {
-    incrementCount();
-  }
-};
+    return {
+      spins,
+      investment,
+      profit,
+    };
+  });
+});
+function calculate() {
+  const prob = Number(probability.value);
+  const rot = Number(rotationsPer1k.value);
+  const initPay = Number(initialPayout.value);
+  const entryRate = Number(rushEntryRate.value) / 100;
+  const contRate = Number(rushContinueRate.value) / 100;
 
-const LIMIT = 3;
+  // 1回転あたりコスト
+  const costPerSpin = 1000 / rot;
 
-const todayKey = () => {
-  const d = new Date();
-  return `count-${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
-};
+  // 初当たりまでの平均回転数（確率分母）
+  const expectedSpinsToHit = prob;
+  const expectedInvestment = expectedSpinsToHit * costPerSpin;
 
-const getCount = () => {
-  return Number(localStorage.getItem(todayKey()) || 0);
-};
+  // RUSH平均出玉
+  const avgRushPayout = distributions.value.reduce(
+    (sum, d) => sum + (d.rate / 100) * d.payout,
+    0,
+  );
 
-const incrementCount = () => {
-  localStorage.setItem(todayKey(), getCount() + 1);
-};
+  const rushTotalPayout = contRate >= 1 ? 0 : avgRushPayout / (1 - contRate);
 
-const goToPayment = () => {
-  window.location.href = "ここにStripeのPayment Link";
-};
+  // 初当たり1回あたり期待出玉
+  const expectedPayout = initPay + entryRate * rushTotalPayout;
+
+  const profit = expectedPayout - expectedInvestment;
+
+  result.value = {
+    expectedSpinsToHit,
+    expectedInvestment,
+    expectedPayout,
+    profit,
+    breakEvenYen: expectedPayout * 4,
+  };
+
+  showResultModal.value = true;
+}
+
+const showModal = ref(false);
+
+onMounted(() => {
+  showModal.value = true;
+});
+
+function agree() {
+  localStorage.setItem("agreed", "true");
+  showModal.value = false;
+}
+
+watch(showModal, (val) => {
+  document.body.style.overflow = val ? "hidden" : "";
+});
+
+const showResultModal = ref(false);
+
+function close() {
+  showResultModal.value = false;
+}
 </script>
 
 <template>
   <div class="container">
-    <div class="container">
-      <h1>期待値シミュレーター</h1>
+    <!-- Modal -->
+    <div v-if="showModal" class="modal">
+      <div class="modal-content">
+        <h2>このサイトについて</h2>
+        <p>
+          本シミュレーターは、パチンコ台の期待値を確率論に基づいて計算するツールです。
+        </p>
 
-      <p>
-        本サービスは、確率や数値の関係を理解するための学習・計算用Webツールです。<br />
-        統計・確率の考え方を可視化することを目的としており、<br />
-        ギャンブルや投機行為を推奨・支援するものではありません。<br />
-        本ツールは教育・学習用途として提供されています。<br />
-      </p>
+        <h2>※注意事項</h2>
+        <p>実際の結果を保証するものではありません。</p>
+        <p>短期的な収支を保証するものではありません。</p>
+        <p>あくまで判断材料の一つとしてご利用ください。</p>
 
-      <p>無料利用回数を超えた場合、100円の買い切り決済で 継続利用できます。</p>
-
-      <!-- <p class="contact">お問い合わせ：your-email@gmail.com</p> -->
-
-      <p>
-        ※期待値は理論上の数値であり、実際の結果を保証するものではありません。
-      </p>
+        <button @click="agree">同意して使う</button>
+      </div>
     </div>
 
-    <div>
-      <label>確率（例：99）</label>
-      <input type="number" v-model="prob" />
-    </div>
+    <h2>期待値シミュレーター</h2>
 
-    <div>
-      <label>回転数</label>
-      <input type="number" v-model="spins" />
-    </div>
+    <section class="input-area">
+      <!-- 基本情報 -->
+      <div class="input-card">
+        <h3>基本情報</h3>
 
-    <div>
-      <label>投資金額（円）</label>
-      <input type="number" v-model="cost" />
-    </div>
+        <div class="input-row">
+          <label>大当たり確率</label>
+          <div class="input-with-unit">
+            <span>1 /</span>
+            <input v-model.number="probability" />　
+          </div>
+        </div>
 
-    <button @click="calc">計算する</button>
+        <div class="input-row">
+          <label>1K回転数</label>
+          <div class="input-with-unit">
+            <input v-model.number="rotationsPer1k" />
+            <span>回</span>
+          </div>
+        </div>
+      </div>
 
-    <div v-if="result !== null">
-      <h2>
-        期待値：
-        <span :style="{ color: result >= 0 ? 'green' : 'red' }">
-          {{ result }} 円
-        </span>
-      </h2>
-    </div>
-    <div v-if="isLimited">
-      <p v-if="message" style="color: red">
-        {{ message }}
-      </p>
-      <button @click="goToPayment">有料版を利用する（100円）</button>
-    </div>
+      <!-- 初当たり -->
+      <div class="input-card">
+        <h3>初当たり</h3>
 
-    <a href="/tokushoho.html">特定商取引法に基づく表記</a>
+        <div class="input-row">
+          <label>初当たり出玉</label>
+          <div class="input-with-unit">
+            <input v-model.number="initialPayout" />
+            <span>発</span>
+          </div>
+        </div>
+
+        <div class="input-row">
+          <label>RUSH突入率</label>
+          <div class="input-with-unit">
+            <input v-model.number="rushEntryRate" />
+            <span>%</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- RUSH -->
+      <div class="input-card">
+        <h3>RUSH性能</h3>
+
+        <div class="input-row">
+          <label>継続率</label>
+          <div class="input-with-unit">
+            <input v-model.number="rushContinueRate" />
+            <span>%</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="container">
+        <!-- 出玉振り分けカード -->
+        <div class="card">
+          <div class="card-header">
+            <h3>出玉振り分け</h3>
+          </div>
+
+          <div v-for="(p, index) in payouts" :key="index" class="row">
+            <input type="number" v-model.number="p.rate" min="0" max="100" />
+            <span>%</span>
+
+            <input type="number" v-model.number="p.balls" placeholder="出玉" />
+            <span>発</span>
+
+            <button
+              class="remove"
+              @click="removePayout(index)"
+              v-if="payouts.length > 1"
+            >
+              -
+            </button>
+          </div>
+          <button class="add" @click="addPayout">＋ 追加</button>
+
+          <p class="warning" v-if="totalRate !== 100">
+            合計：{{ totalRate }}%（100%にしてください）
+          </p>
+        </div>
+
+        <!-- 円グラフ -->
+        <!-- <div class="card chart-card">
+          <Pie :data="chartData" :options="chartOptions" />
+        </div> -->
+      </div>
+    </section>
+
+    <button @click="calculate">計算する</button>
+
+    <!-- ResultModal -->
+    <div v-if="showResultModal" class="modal">
+      <div class="modal-content">
+        <section v-if="result">
+          <h2>計算結果</h2>
+          <p>初当たり期待出玉：{{ Math.round(result.expectedPayout) }} 発</p>
+          <p>損益分岐：{{ Math.round(result.breakEvenYen) }} 円</p>
+
+          <p>
+            初当たりまでの平均投資額：{{
+              Math.round(result.expectedInvestment)
+            }}
+            円
+          </p>
+        </section>
+        <section>
+          <h3>回転数別期待値</h3>
+
+          <div class="horizontal-scroll">
+            <div v-for="r in resultsBySpins" :key="r.spins" class="result-card">
+              <h4>{{ r.spins }}回転で当たり</h4>
+
+              <p>投資額</p>
+              <strong>{{ Math.round(r.investment) }}円</strong>
+
+              <p>期待収支</p>
+              <strong :style="{ color: r.profit >= 0 ? 'green' : 'red' }">
+                {{ Math.round(r.profit) }}円
+              </strong>
+            </div>
+          </div>
+        </section>
+
+        <button @click="close">閉じる</button>
+      </div>
+    </div>
   </div>
 </template>
-
-<style>
-.container {
-  max-width: 600px;
-  margin: 40px auto;
-  font-family: sans-serif;
-}
-input {
-  width: 100%;
-  margin-bottom: 12px;
-}
-button {
-  width: 100%;
-  padding: 8px;
-}
-</style>
