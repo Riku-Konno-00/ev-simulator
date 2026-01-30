@@ -110,6 +110,8 @@ const goToPayment = () => {
       </p>
       <button @click="goToPayment">有料版を利用する（100円）</button>
     </div>
+
+    <a href="/tokushoho.html">特定商取引法に基づく表記</a>
   </div>
 </template>
 
