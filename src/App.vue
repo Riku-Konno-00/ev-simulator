@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, watch, reactive } from "vue";
+import { ref, computed, onMounted, watch } from "vue";
 
 // 追加
 const addPayout = () => {
@@ -31,7 +31,7 @@ const rushEntryRate = ref(72); // RUSH突入率（%）
 const rushContinueRate = ref(85); // 継続率（%）
 
 // 出玉振り分け
-const distributions = ref([{ rate: 100, balls: 2000 }]);
+const distributions = ref([{ rate: 100, balls: 1500 }]);
 /* =====================
    出力値
 ===================== */
