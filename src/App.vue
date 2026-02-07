@@ -1,43 +1,20 @@
 <script setup>
 import { ref, computed, onMounted, watch, reactive } from "vue";
-import { Pie } from "vue-chartjs";
-import { Chart as ChartJS, ArcElement, Tooltip, Legend } from "chart.js";
-
-ChartJS.register(ArcElement, Tooltip, Legend);
-
-// 出玉振り分け（初期値）
-const payouts = reactive([
-  { balls: 1500, rate: 50 },
-  { balls: 3000, rate: 30 },
-]);
 
 // 追加
 const addPayout = () => {
-  payouts.push({ balls: 1000, rate: 0 });
+  distributions.value.push({ balls: 1000, rate: 0 });
 };
 
 // 削除
 const removePayout = (index) => {
-  payouts.splice(index, 1);
-};
-
-// 円グラフ用
-const chartData = computed(() => ({
-  labels: payouts.map((p) => `${p.balls}発`),
-  datasets: [
-    {
-      data: payouts.map((p) => p.rate),
-    },
-  ],
-}));
-
-const chartOptions = {
-  responsive: true,
-  maintainAspectRatio: false,
+  distributions.value.splice(index, 1);
 };
 
 // 合計％
-const totalRate = computed(() => payouts.reduce((sum, p) => sum + p.rate, 0));
+const totalRate = computed(() =>
+  distributions.value.reduce((sum, d) => sum + d.rate, 0),
+);
 /* =====================
    入力値
 ===================== */
@@ -54,28 +31,11 @@ const rushEntryRate = ref(72); // RUSH突入率（%）
 const rushContinueRate = ref(85); // 継続率（%）
 
 // 出玉振り分け
-const distributions = ref([
-  { rate: 50, payout: 1000 },
-  { rate: 50, payout: 3000 },
-]);
+const distributions = ref([{ rate: 100, balls: 2000 }]);
 /* =====================
    出力値
 ===================== */
 const result = ref(null);
-
-/* =====================
-   振り分け操作
-===================== */
-
-function addRow() {
-  distributions.value.push({ rate: 0, payout: 0 });
-}
-
-function removeRow(index) {
-  if (distributions.value.length > 1) {
-    distributions.value.splice(index, 1);
-  }
-}
 
 /* =====================
    計算系
@@ -113,11 +73,11 @@ function calculate() {
   const expectedInvestment = expectedSpinsToHit * costPerSpin;
 
   // RUSH平均出玉
-  const avgRushPayout = distributions.value.reduce(
-    (sum, d) => sum + (d.rate / 100) * d.payout,
-    0,
-  );
+  const avgRushPayout = distributions.value
+    .filter((d) => d.rate > 0 && d.balls > 0)
+    .reduce((sum, d) => sum + (d.rate / 100) * d.balls, 0);
 
+  // RUSHトータル期待出玉
   const rushTotalPayout = contRate >= 1 ? 0 : avgRushPayout / (1 - contRate);
 
   // 初当たり1回あたり期待出玉
@@ -242,17 +202,17 @@ function close() {
             <h3>出玉振り分け</h3>
           </div>
 
-          <div v-for="(p, index) in payouts" :key="index" class="row">
-            <input type="number" v-model.number="p.rate" min="0" max="100" />
+          <div v-for="(d, index) in distributions" :key="index" class="row">
+            <input type="number" v-model.number="d.rate" min="0" max="100" />
             <span>%</span>
 
-            <input type="number" v-model.number="p.balls" placeholder="出玉" />
+            <input type="number" v-model.number="d.balls" placeholder="出玉" />
             <span>発</span>
 
             <button
               class="remove"
               @click="removePayout(index)"
-              v-if="payouts.length > 1"
+              v-if="distributions.length > 1"
             >
               -
             </button>
